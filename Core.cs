@@ -3,10 +3,12 @@ using Il2CppKeepsake;
 using Il2CppKeepsake.Modal;
 using MelonLoader;
 using System.Collections;
+using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.Utilities;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using static Il2CppKeepsake.HyperSpace.NewInputSystem.InputManager;
 
@@ -21,20 +23,22 @@ namespace ReGUI
         public static bool Controls = false;
         public static GameObject gui;
         public static GameObject lobbyHud;
+        public static GameObject iconTracker;
 
         private static MelonPreferences_Category Prefs;
 
-        private static MelonPreferences_Entry<string> IncreaseKey;
-        private static MelonPreferences_Entry<string> DecreaseKey;
+        private static MelonPreferences_Entry<string> IncreaseEquipmentKey;
+        private static MelonPreferences_Entry<string> DecreaseEquipmentKey;
         private static MelonPreferences_Entry<float> EquipmentScale;
+
+        private static MelonPreferences_Entry<string> IncreaseNotificationKey;
+        private static MelonPreferences_Entry<string> DecreaseNotificationKey;
+        private static MelonPreferences_Entry<float> NotificationScale;
 
         private static MelonPreferences_Entry<string> ToggleCaptionsKey;
         private static MelonPreferences_Entry<string> ToggleControlsKey;
         private static MelonPreferences_Entry<string> ToggleCrosshairKey;
         private static MelonPreferences_Entry<string> ToggleHudKey;
-        private static MelonPreferences_Entry<string> RefreshUIKey1;
-        private static MelonPreferences_Entry<string> RefreshUIKey2;
-        private static MelonPreferences_Entry<string> RefreshUIKey3;
 
         private static MelonPreferences_Entry<string> ZoomKey;
         private static MelonPreferences_Entry<float> ZoomFOV;
@@ -54,18 +58,18 @@ namespace ReGUI
 
             Prefs = MelonPreferences.CreateCategory("CompactUI");
 
-            IncreaseKey = Prefs.CreateEntry("IncreaseScaleKey", "F4");
-            DecreaseKey = Prefs.CreateEntry("DecreaseScaleKey", "F3");
+            IncreaseEquipmentKey = Prefs.CreateEntry("IncreaseScaleKey", "F4");
+            DecreaseEquipmentKey = Prefs.CreateEntry("DecreaseScaleKey", "F3");
             EquipmentScale = Prefs.CreateEntry("EquipmentBarScale", 1f);
+
+            NotificationScale = Prefs.CreateEntry("NotificationScale", 1f);
+            IncreaseNotificationKey = Prefs.CreateEntry("IncreaseNotificationKey", ",");
+            DecreaseNotificationKey = Prefs.CreateEntry("DecreaseNotificationKey", ".");
 
             ToggleCaptionsKey = Prefs.CreateEntry("ToggleCaptionsKey", "F9");
             ToggleControlsKey = Prefs.CreateEntry("ToggleControlsKey", "F10");
             ToggleCrosshairKey = Prefs.CreateEntry("ToggleCrosshairKey", "F11");
             ToggleHudKey = Prefs.CreateEntry("ToggleHudKey", "F8");
-
-            RefreshUIKey1 = Prefs.CreateEntry("RefreshUIKey1", "F");
-            RefreshUIKey2 = Prefs.CreateEntry("RefreshUIKey2", "Esc");
-            RefreshUIKey3 = Prefs.CreateEntry("RefreshUIKey3", "B");
 
             ZoomKey = Prefs.CreateEntry("ZoomKey", "Z");
             ZoomFOV = Prefs.CreateEntry("ZoomFOV", 35f);
@@ -78,9 +82,10 @@ namespace ReGUI
         public override void OnSceneWasInitialized(int buildIndex, string sceneName)
         {
             if (sceneName == "Global")
-            { 
+            {
                 gui = GameObject.Find("PF_GUI/FullScreenGUI");
             }
+            iconTracker = GameObject.Find("PF_GUI/FullScreenGUI/PF_IconTracker");
             MelonCoroutines.Start(LongDelayedActivate());
 
             if (sceneName == "Dest_Lobby_Start")
@@ -170,16 +175,9 @@ namespace ReGUI
                 MelonCoroutines.Start(ShortDelayedActivate());
             }
 
-            if (
-                IsKeyPressed(RefreshUIKey1.Value, kb) ||
-                IsKeyPressed(RefreshUIKey2.Value, kb) ||
-                IsKeyPressed(RefreshUIKey3.Value, kb)
-            )
-            {
-                MelonCoroutines.Start(ShortDelayedActivate());
-            }
 
             HandleScaleHotkeys();
+            ApplyNotificationScale();
             try { HandleCameraZoom(kb); } catch { }
         }
 
@@ -325,7 +323,7 @@ namespace ReGUI
             var zoomSpeedSetting = new ModalButton(
                 $"Zoom Speed: {ZoomSpeed.Value}",
                 InputKeys.Jump,
-                
+
                 onClick: new System.Action<ModalButton>((_) =>
                 {
                     ZoomSpeedModal();
@@ -363,17 +361,17 @@ namespace ReGUI
                 InputKeys.Jump,
                 onClick: new System.Action<ModalButton>((_) => ModalManager.CancelAllModals())
                 );
-            
+
             var incScale = new ModalButton(
-                $"Increase Scale: {IncreaseKey.Value}",
+                $"Increase Scale: {IncreaseEquipmentKey.Value}",
                 InputKeys.Jump,
-                onClick: new System.Action<ModalButton>((_) => BeginKeyRebind(IncreaseKey))
+                onClick: new System.Action<ModalButton>((_) => BeginKeyRebind(IncreaseEquipmentKey))
             );
 
             var decScale = new ModalButton(
-                $"Decrease Scale: {DecreaseKey.Value}",
+                $"Decrease Scale: {DecreaseEquipmentKey.Value}",
                 InputKeys.Jump,
-                onClick: new System.Action<ModalButton>((_) => BeginKeyRebind(DecreaseKey))
+                onClick: new System.Action<ModalButton>((_) => BeginKeyRebind(DecreaseEquipmentKey))
             );
 
             var toggleCaptions = new ModalButton(
@@ -424,9 +422,6 @@ namespace ReGUI
             );
         }
 
-
-
-
         private void BeginKeyRebind(MelonPreferences_Entry<string> entry)
         {
             waitingForKeybind = true;
@@ -444,15 +439,12 @@ namespace ReGUI
             );
         }
 
-
-
-
         private void HandleScaleHotkeys()
         {
             var kb = Keyboard.current;
             if (kb == null) return;
 
-            if (TryGetKey(IncreaseKey.Value, kb, out var incKey) && incKey.wasPressedThisFrame)
+            if (TryGetKey(IncreaseEquipmentKey.Value, kb, out var incKey) && incKey.wasPressedThisFrame)
             {
                 EquipmentScale.Value = Mathf.Clamp(EquipmentScale.Value + 0.05f, 0.2f, 2.0f);
                 ApplyEquipmentScale();
@@ -460,11 +452,25 @@ namespace ReGUI
                 MelonPreferences.Save();
             }
 
-            if (TryGetKey(DecreaseKey.Value, kb, out var decKey) && decKey.wasPressedThisFrame)
+            if (TryGetKey(DecreaseEquipmentKey.Value, kb, out var decKey) && decKey.wasPressedThisFrame)
             {
                 EquipmentScale.Value = Mathf.Clamp(EquipmentScale.Value - 0.05f, 0.2f, 2.0f);
                 ApplyEquipmentScale();
                 LoggerInstance.Msg($"[CompactUI] Equipment bar scale: {EquipmentScale.Value:F2}");
+                MelonPreferences.Save();
+            }
+
+            if (TryGetKey(IncreaseNotificationKey.Value, kb, out var incNotificationKey) && incNotificationKey.wasPressedThisFrame)
+            {
+                NotificationScale.Value = Mathf.Clamp(NotificationScale.Value + 0.05f, 0.2f, 2.0f);
+                LoggerInstance.Msg($"[CompactUI] Notification bar scale: {NotificationScale.Value:F2}");
+                MelonPreferences.Save();
+            }
+
+            if (TryGetKey(DecreaseNotificationKey.Value, kb, out var decNotificationKey) && decNotificationKey.wasPressedThisFrame)
+            {
+                NotificationScale.Value = Mathf.Clamp(NotificationScale.Value - 0.05f, 0.2f, 2.0f);
+                LoggerInstance.Msg($"[CompactUI] Notification bar scale: {NotificationScale.Value:F2}");
                 MelonPreferences.Save();
             }
         }
@@ -497,6 +503,7 @@ namespace ReGUI
             MelonPreferences.Load();
 
             try { ApplyEquipmentScale(); } catch { }
+            try { ApplyNotificationScale(); } catch { }
 
             try
             {
@@ -561,6 +568,14 @@ namespace ReGUI
                     control.SetActive(!Controls);
             }
             catch { }
+
+            try
+            {
+                var controls = FindGameObjectsContaining("PF_IngameFullscreen");
+                foreach (var control in controls)
+                    control.SetActive(!Controls);
+            }
+            catch { }
         }
 
         private static void ApplyEquipmentScale()
@@ -571,6 +586,41 @@ namespace ReGUI
                 float s = EquipmentScale.Value;
                 bar.transform.localScale = new Vector3(s, s, s);
             }
+        }
+
+        private static void ApplyNotificationScale()
+        {
+            if (iconTracker == null)
+            {
+                return;
+            }
+            foreach (var icon in GetDirectChilderen(iconTracker))
+            {
+                if (icon != null)
+                {
+                    float s = NotificationScale.Value;
+                    icon.transform.localScale = new Vector3(s, s, s);
+                }
+            }
+        }
+
+        public static List<GameObject> GetDirectChilderen(GameObject parent)
+        {
+            List<GameObject> descendants = new List<GameObject>();
+
+            // GetComponentsInChildren returns parent + all children
+            Transform[] allTransforms = parent.GetComponentsInChildren<Transform>(true);
+
+            foreach (Transform t in allTransforms)
+            {
+                // Skip the parent object itself
+                if (t.gameObject != parent)
+                {
+                    descendants.Add(t.gameObject);
+                }
+            }
+
+            return descendants;
         }
 
         public static List<GameObject> FindGameObjectsContaining(string substring)
