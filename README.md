@@ -2,6 +2,8 @@
 ReGUI rearranges Jump Spaces user interface and adds the following toggles and options:<br>
 F3 - Decrease Equipment Bar Scale<br>
 F4 - Increase Equipment Bar Scale<br>
+, - Decrease Icon Scale<br>
+. - Increase Icon Scale<br>
 F8 - Toggle HUD<br>
 F9 - Toggle Captions<br>
 F10 - Toggle Keybind Tooltips [Experimental]<br>
